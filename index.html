@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini Chat</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <style>
+        body {
+            background-color: #18181b;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #f0f0f0;
+        }
+        .chat-log {
+            background-color: #282c34;
+            padding: 10px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+        }
+        .message {
+            padding: 10px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            transition: all 0.3s ease-in-out;
+        }
+        .message-enter {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+        .message-enter-active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .message-exit {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .message-exit-active {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+        .user-message {
+            background-color: #03a9f4;
+            color: #fff;
+            align-self: flex-end;
+        }
+        .assistant-message {
+            background-color: #4CAF50;
+            color: #fff;
+            align-self: flex-start;
+        }
+        .button-group {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            gap: 12px;
+            width: 100%;
+            margin: 0 auto;
+        }
+        .button-group button {
+            padding: 8px 16px;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            text-align: center;
+            font-size: 0.9rem;
+        }
+        .button-group button:hover {
+            transform: scale(1.05);
+        }
+        #user-input {
+            flex-grow: 1;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid #ccc;
+            box-sizing: border-box;
+            margin-right: 12px;
+        }
+        #language-selector {
+            padding: 8px 12px;
+            border-radius: 8px;
+            background-color: #333;
+            color: #fff;
+        }
+        @media (max-width: 768px) {
+          .button-group {
+            flex-direction: column;
+          }
+        }
+    </style>
+</head>
+<body>
+    <div class="container mx-auto p-4">
+        <div class="flex justify-center">
+            <div class="bg-gray-800 p-6 rounded-xl shadow-lg w-full max-w-2xl">
+                <h1 class="text-3xl font-extrabold text-white text-center mb-6">AI Chat</h1>
+                <div class="chat-log h-[400px] overflow-y-auto flex flex-col mb-4" id="chat-log">
+                </div>
+                <div class="flex items-center button-group">
+                    <input type="text" class="p-3 rounded-md border border-gray-300 focus:ring-2 focus:ring-blue-500" id="user-input" placeholder="Type your message...">
+                    <button class="bg-blue-500 text-white font-semibold py-2 px-4 rounded-md hover:bg-blue-600" id="send-button"><i class="material-icons">send</i></button>
+                    <input type="file" class="hidden" id="file-input">
+                    <label for="file-input" class="bg-yellow-500 text-white font-semibold py-2 px-4 rounded-md hover:bg-yellow-600 cursor-pointer"><i class="material-icons">attach_file</i></label>
+                    <button class="bg-green-500 text-white font-semibold py-2 px-4 rounded-md hover:bg-green-600" id="camera-button"><i class="material-icons">camera_alt</i></button>
+                    <button class="bg-red-500 text-white font-semibold py-2 px-4 rounded-md hover:bg-red-600 hidden" id="close-camera-button"><i class="material-icons">close</i></button>
+                    <button class="bg-yellow-500 text-white font-semibold py-2 px-4 rounded-md hover:bg-yellow-600" id="mic-button"><i class="material-icons">mic</i></button>
+                    <select id="language-selector" class="p-2 rounded-md">
+                        <option value="en-IN">English</option>
+                        <option value="hi-IN">Hindi</option>
+                        <option value="bn-IN">Bengali</option>
+                        <option value="ta-IN">Tamil</option>
+                        <option value="te-IN">Telugu</option>
+                        <option value="gu-IN">Gujarati</option>
+                        <option value="pa-IN">Punjabi</option>
+                        <option value="mr-IN">Marathi</option>
+                        <option value="ml-IN">Malayalam</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios@0.21.1/dist/axios.min.js"></script>
+
+    <script>
+        const chatLog = document.getElementById('chat-log');
+        const userInput = document.getElementById('user-input');
+        const fileInput = document.getElementById('file-input');
+        const sendButton = document.getElementById('send-button');
+        const cameraButton = document.getElementById('camera-button');
+        const closeCameraButton = document.getElementById('close-camera-button');
+        const micButton = document.getElementById('mic-button');
+        const attachFileButton = document.getElementById('file-input');
+        const languageSelector = document.getElementById('language-selector');
+        let messages = [];
+        let capturedImage = null;
+        let videoStream = null;
+        let cameraOpen = false;
+        let videoElement = null;
+        let captureButton = null;
+
+        // Function to capture a photo using the camera
+        async function openCamera() {
+            if (cameraOpen) return;  // Prevent opening multiple camera windows
+
+            try {
+                // Start the camera
+                videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                videoElement = document.createElement('video');
+                videoElement.srcObject = videoStream;
+                videoElement.play();
+
+                captureButton = document.createElement('button');
+                captureButton.textContent = 'Capture';
+                captureButton.className = 'bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-md mt-2';
+                document.body.appendChild(captureButton);
+
+                captureButton.onclick = () => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = videoElement.videoWidth;
+                    canvas.height = videoElement.videoHeight;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+                    const dataUrl = canvas.toDataURL('image/jpeg');
+                    capturedImage = dataUrl;
+                    document.body.removeChild(captureButton); // Remove the capture button
+                    document.body.removeChild(videoElement); // Remove the video element
+                    videoStream.getTracks().forEach(track => track.stop()); // Stop the video stream
+                    closeCameraButton.classList.remove('hidden'); // Show the close camera button
+                    cameraOpen = false;
+                    alert('Photo captured! Now you can send it.');
+                };
+
+                const cameraWrapper = document.createElement('div');
+                cameraWrapper.appendChild(videoElement);
+                document.body.appendChild(cameraWrapper);
+
+                cameraOpen = true;
+                closeCameraButton.classList.remove('hidden');
+            } catch (err) {
+                console.error('Error accessing camera: ', err);
+                alert('Could not access camera. Please allow camera access.');
+            }
+        }
+
+        // Function to close the camera
+        function closeCamera() {
+            if (videoStream) {
+                videoStream.getTracks().forEach(track => track.stop()); // Stop the video stream
+            }
+            if (videoElement) {
+                videoElement.remove(); // Remove the video element from the DOM
+            }
+            if (captureButton) {
+                captureButton.remove(); // Remove the capture button
+            }
+            closeCameraButton.classList.add('hidden');
+            cameraOpen = false;
+            alert('Camera closed');
+        }
+
+        // Open the camera when the "Take a Photo" button is clicked
+        cameraButton.addEventListener('click', openCamera);
+        closeCameraButton.addEventListener('click', closeCamera);
+
+        // Initialize speech recognition
+        const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+        recognition.continuous = false;  // Set continuous listening to false
+        recognition.interimResults = false;  // We don't want intermediate results, only the final result
+
+        // Start the microphone and convert speech to text
+        function startListening() {
+            const selectedLang = languageSelector.value;
+            recognition.lang = selectedLang; // Set the language based on user selection
+            recognition.start();
+            micButton.classList.add('bg-red-500'); // Change button color to indicate listening
+            micButton.classList.remove('bg-yellow-500');
+        }
+
+        recognition.onstart = () => {
+            console.log("Voice recognition started.");
+        };
+
+        recognition.onresult = (event) => {
+            const transcript = event.results[0][0].transcript;
+            console.log("Recognized Speech:", transcript);
+            userInput.value = transcript; // Display the recognized text in the input field
+            micButton.classList.remove('bg-red-500');
+            micButton.classList.add('bg-yellow-500'); // Change the mic button back
+        };
+
+        recognition.onerror = (event) => {
+            console.error("Speech recognition error:", event.error);
+        };
+
+        // Start listening when the mic button is clicked
+        micButton.addEventListener('click', startListening);
+
+        // Automatically trigger send button when Enter key is pressed
+        userInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault(); // Prevent default behavior of Enter key
+                sendButton.click(); // Trigger send button click
+            }
+        });
+
+        // Send the message to the server
+        sendButton.addEventListener('click', async () => {
+            const userMessage = userInput.value.trim();
+            const file = fileInput.files[0];
+
+            if (userMessage === "" && !file && !capturedImage) {
+                alert("Please provide a message or select a file.");
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('user_message', userMessage);
+            if (file) {
+                formData.append('file', file);
+                console.log("File added to formData:", file.name);
+            }
+
+            // Append the captured image to formData if available
+            if (capturedImage) {
+                const byteString = atob(capturedImage.split(',')[1]); // Remove the data URL prefix
+                const arrayBuffer = new ArrayBuffer(byteString.length);
+                const view = new Uint8Array(arrayBuffer);
+                for (let i = 0; i < byteString.length; i++) {
+                    view[i] = byteString.charCodeAt(i);
+                }
+                const blob = new Blob([view], { type: 'image/jpeg' });
+                formData.append('file', blob, 'captured_image.jpg');
+            }
+
+            messages.forEach(msg => formData.append("messages", JSON.stringify(msg)));
+
+            try {
+                const response = await fetch('http://127.0.0.1:5000/chat', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP error ${response.status}: ${errorText}`);
+                }
+
+                const data = await response.json();
+                if (data.error) {
+                    console.error("Error from API:", data.error);
+                    alert(data.error);
+                    return;
+                }
+
+                messages = data.messages;
+                chatLog.innerHTML = "";
+                messages.forEach(msg => {
+                    const messageElement = document.createElement('div');
+                    messageElement.className = `message ${msg.sender === 'user' ? 'text-right bg-blue-500 text-white' : 'text-left bg-gray-200 text-gray-800'} p-3 rounded-lg mb-2 max-w-xs self-${msg.sender === 'user' ? 'end' : 'start'} transition-all duration-300 ease-in-out`;
+
+                    if (msg.file) {
+                        const img = document.createElement('img');
+                        img.src = msg.file; // Display the uploaded or captured image
+                        img.className = 'rounded-lg mt-2 max-w-xs';
+                        messageElement.appendChild(img);
+                    } else {
+                        messageElement.textContent = msg.text;
+                    }
+
+                    chatLog.appendChild(messageElement);
+                });
+
+                userInput.value = '';
+                fileInput.value = '';
+                capturedImage = null;
+            } catch (error) {
+                console.error("Fetch error:", error);
+                alert("An error occurred. Please try again. Check the console for details.");
+            }
+        });
+    </script>
+</body>
+</html>
